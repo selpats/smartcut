@@ -84,16 +84,53 @@ def make_cut_segments(media_container: MediaContainer,
         if p == len(positive_segments) or o <= positive_segments[p][0]:
             pass
         elif keyframe_mode or (i >= positive_segments[p][0] and o <= positive_segments[p][1]):
-            cut_segments.append(CutSegment(False, i, o, i_dts, o_dts, gop_idx))
+            # Complete overlap — check if this is the last complete GOP in
+            # the positive segment.  If so, force recode to avoid B-frame
+            # reordering producing PTS past the desired end, which causes
+            # black frames in the output.
+            next_gop_end = source_cutpoints[gop_idx + 2] if gop_idx + 2 < len(source_cutpoints) else media_container.start_time + media_container.duration + Fraction(1, 10000)
+            is_last_complete_gop = (next_gop_end > positive_segments[p][1])
+            if (
+                not keyframe_mode
+                and is_last_complete_gop
+                and positive_segments[p][1] < media_container.start_time + media_container.duration - Fraction(1, 10)
+            ):
+                cut_segments.append(CutSegment(True, i, o, i_dts, o_dts, gop_idx))
+            else:
+                cut_segments.append(CutSegment(False, i, o, i_dts, o_dts, gop_idx))
         else:
             if i > positive_segments[p][0]:
-                cut_segments.append(CutSegment(True, i, positive_segments[p][1], i_dts, o_dts, gop_idx))
+                seg_end = min(positive_segments[p][1], o)
+                cut_segments.append(CutSegment(True, i, seg_end, i_dts, o_dts, gop_idx))
                 p += 1
             while p < len(positive_segments) and positive_segments[p][1] < o:
                 cut_segments.append(CutSegment(True, positive_segments[p][0], positive_segments[p][1], i_dts, o_dts, gop_idx))
                 p += 1
             if p < len(positive_segments) and positive_segments[p][0] < o:
-                cut_segments.append(CutSegment(True, positive_segments[p][0], o, i_dts, o_dts, gop_idx))
+                seg_end = min(positive_segments[p][1], o)
+                cut_segments.append(CutSegment(True, positive_segments[p][0], seg_end, i_dts, o_dts, gop_idx))
+
+    # Merge consecutive remux segments with overlapping GOP ranges to avoid
+    # duplicated packets when the source has very short GOPs.
+    if len(cut_segments) > 1:
+        merged = [cut_segments[0]]
+        for seg in cut_segments[1:]:
+            prev = merged[-1]
+            if (
+                not prev.require_recode
+                and not seg.require_recode
+                and seg.gop_start_dts < prev.gop_end_dts
+                and seg.start_time <= prev.end_time + Fraction(1, 10000)
+            ):
+                merged[-1] = CutSegment(
+                    False,
+                    prev.start_time, seg.end_time,
+                    prev.gop_start_dts, seg.gop_end_dts,
+                    seg.gop_index,
+                )
+            else:
+                merged.append(seg)
+        cut_segments = merged
 
     return cut_segments
 

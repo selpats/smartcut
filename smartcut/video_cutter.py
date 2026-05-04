@@ -443,7 +443,18 @@ class VideoCutter:
             self.last_remuxed_segment_gop_index = cut_segment.gop_index
             self.is_first_remuxed_segment = False
         else:
-            packets = self.flush_encoder()
+            flush_packets = self.flush_encoder()
+
+            # When transitioning from recode to remux, adjust
+            # segment_start_in_output so remuxed content follows
+            # immediately after the flushed recode packets.
+            if flush_packets:
+                valid = [p for p in flush_packets if p.pts is not None and p.duration is not None and p.duration > 0]
+                if valid:
+                    flush_end = max((p.pts + p.duration) * self.out_time_base for p in valid)
+                    self.segment_start_in_output = max(self.segment_start_in_output, flush_end)
+
+            packets = flush_packets
             packets.extend(self.remux_segment(cut_segment))
             # Update tracking variables for hybrid CRA recoding
             self.last_remuxed_segment_gop_index = cut_segment.gop_index
