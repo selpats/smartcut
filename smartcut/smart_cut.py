@@ -205,8 +205,11 @@ def smart_cut(media_container: MediaContainer, positive_segments: list[tuple[Fra
                         generators.append(PassthruAudioCutter(media_container, audio_out_stream, track_i))
 
             for sub_track_i in range(len(media_container.subtitle_tracks)):
-                subtitle_out_stream = create_subtitle_output_stream(media_container, output_av_container, sub_track_i)
-                generators.append(SubtitleCutter(media_container, subtitle_out_stream, sub_track_i))
+                try:
+                    subtitle_out_stream = create_subtitle_output_stream(media_container, output_av_container, sub_track_i)
+                    generators.append(SubtitleCutter(media_container, subtitle_out_stream, sub_track_i))
+                except (ValueError, Exception) as e:
+                    print(f"Warning: Skipping subtitle track {sub_track_i} because the output format '{output_av_container.format.name}' does not support its codec: {e}")
 
             output_av_container.start_encoding()
             if progress is not None:

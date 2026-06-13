@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", message="Numpy built with MINGW-W64")
+
 import argparse
 import sys
 from fractions import Fraction
