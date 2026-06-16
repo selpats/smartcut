@@ -1,0 +1,130 @@
+# Maintainer: Alexey Pavlov <Alexpux@gmail.com>
+# Contributor: Zach Bacon <11doctorwhocanada@gmail.com>
+# Contributor: wirx6 <wirx654@gmail.com>
+# Contributor: Ray Donnelly <mingw.android@gmail.com>
+
+_realname=ffmpeg
+pkgbase="mingw-w64-${_realname}"
+pkgname="${MINGW_PACKAGE_PREFIX}-${_realname}"
+pkgver=8.1.1
+pkgrel=1
+pkgdesc="Complete solution to record, convert and stream audio and video (mingw-w64)"
+arch=('any')
+mingw_arch=('mingw32' 'mingw64' 'ucrt64' 'clang64' 'clangarm64')
+url="https://ffmpeg.org/"
+msys2_repository_url='https://git.ffmpeg.org/ffmpeg.git'
+msys2_references=(
+  "cpe: cpe:/a:ffmpeg:ffmpeg"
+)
+license=('spdx:GPL-3.0-or-later')
+depends=("${MINGW_PACKAGE_PREFIX}-aom"
+         "${MINGW_PACKAGE_PREFIX}-bzip2"
+         "${MINGW_PACKAGE_PREFIX}-dav1d"
+         "${MINGW_PACKAGE_PREFIX}-libiconv"
+         "${MINGW_PACKAGE_PREFIX}-libvpx"
+         "${MINGW_PACKAGE_PREFIX}-libx264"
+         "${MINGW_PACKAGE_PREFIX}-x265"
+         "${MINGW_PACKAGE_PREFIX}-zlib")
+makedepends=("${MINGW_PACKAGE_PREFIX}-cc"
+              "${MINGW_PACKAGE_PREFIX}-autotools"
+              "${MINGW_PACKAGE_PREFIX}-pkgconf"
+              "${MINGW_PACKAGE_PREFIX}-dlfcn"
+              $([[ ${MINGW_PACKAGE_PREFIX} == *-clang-aarch64* ]] || echo "${MINGW_PACKAGE_PREFIX}-nasm"))
+source=(https://ffmpeg.org/releases/${_realname}-${pkgver}.tar.xz{,.asc}
+        "pathtools.c"
+        "pathtools.h"
+        "0005-Win32-Add-path-relocation-to-frei0r-plugins-search.patch")
+validpgpkeys=('FCF986EA15E6E293A5644F10B4322F04D67658D8')
+sha256sums=('b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3'
+            'SKIP'
+            'ebf471173f5ee9c4416c10a78760cea8afaf1a4a6e653977321e8547ce7bf3c0'
+            '1585ef1b61cf53a2ca27049c11d49e0834683dfda798f03547761375df482a90'
+            '8c74e9b5800dbb41c33a60114712726ec768ad6de8f147c2eb30656fd4c899cc')
+
+# Helper macros to help make tasks easier #
+apply_patch_with_msg() {
+  for _fname in "$@"
+  do
+    msg2 "Applying ${_fname}"
+    patch -Nbp1 -i "${srcdir}"/${_fname}
+  done
+}
+
+prepare() {
+  test ! -d "${startdir}/../mingw-w64-pathtools" || {
+    cmp "${startdir}/../mingw-w64-pathtools/pathtools.c" "${srcdir}/pathtools.c" &&
+    cmp "${startdir}/../mingw-w64-pathtools/pathtools.h" "${srcdir}/pathtools.h"
+  } || exit 1
+
+  cd "${srcdir}/${_realname}-${pkgver}"
+  cp -fHv "${srcdir}"/pathtools.[ch] libavfilter/
+
+  apply_patch_with_msg \
+    0005-Win32-Add-path-relocation-to-frei0r-plugins-search.patch
+
+  # rename version to avoid conflict with C++20 <version> header
+  mv VERSION VERSION.txt
+}
+
+build() {
+  local -a common_config
+  common_config+=(
+    --disable-debug
+    --disable-stripping
+    --disable-doc
+    --enable-dxva2
+    --enable-d3d11va
+    --enable-d3d12va
+    --enable-gpl
+    --enable-iconv
+    --enable-libaom
+    --enable-libdav1d
+    --enable-libvpx
+    --enable-libx264
+    --enable-libx265
+    --enable-pic
+    --enable-runtime-cpudetect
+    --enable-swresample
+    --enable-version3
+    --enable-zlib
+  )
+
+  for _variant in -shared; do
+    mkdir -p "${srcdir}/build-${MSYSTEM}${_variant}" && cd "${srcdir}/build-${MSYSTEM}${_variant}"
+
+    if [[ ${_variant} == -static ]]; then
+      ENABLE_VARIANT="--enable-static --pkg-config-flags=--static"
+    else
+      ENABLE_VARIANT=--enable-shared
+    fi
+
+    ../${_realname}-${pkgver}/configure \
+      --prefix=${MINGW_PREFIX} \
+      --target-os=mingw32 \
+      --arch=${CARCH%%-*} \
+      --cc=${CC} \
+      --cxx=${CXX} \
+      "${common_config[@]}" \
+      --logfile=config.log \
+      ${ENABLE_VARIANT}
+
+    make
+  done
+}
+
+check() {
+  msg2 "Skipping checks to speed up build"
+}
+
+package() {
+  for _variant in -shared; do
+    cd "${srcdir}/build-${MSYSTEM}${_variant}"
+    make DESTDIR="${pkgdir}" install
+  done
+  
+  rm -f "${pkgdir}"/${MINGW_PREFIX}/lib/*.def
+  rm -f "${pkgdir}"/${MINGW_PREFIX}/bin/*.lib
+
+  local PREFIX_DEPS=$(cygpath -am ${MINGW_PREFIX})
+  find "${pkgdir}"${MINGW_PREFIX}/lib/pkgconfig -name *.pc -exec sed -i -e"s|${PREFIX_DEPS}|${MINGW_PREFIX}|g" {} \;
+}

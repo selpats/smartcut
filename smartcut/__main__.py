@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", message="Numpy built with MINGW-W64")
+
 import argparse
 import sys
 from fractions import Fraction
@@ -232,6 +235,9 @@ time formats:
     parser.add_argument('--frames', action='store_true',
                        help="Interpret --keep/--cut values as frame numbers instead of times. "
                             "Frames are zero-indexed. Use -1 for the last frame")
+    parser.add_argument('-a', '--audio-track', metavar='TRACKS', type=str,
+                       help="Comma-separated list of 0-based audio track indices to keep (e.g. 0 or 0,1). "
+                            "If not specified, all audio tracks are kept.")
     parser.add_argument('--log-level', choices=['warning', 'error', 'fatal'],
                        default='warning', metavar='LEVEL',
                        help="Set logging verbosity level (default: %(default)s)")
@@ -265,6 +271,21 @@ time formats:
 
     # Default audio settings: include all tracks with lossless passthru
     audio_settings: list[AudioExportSettings | None] = [AudioExportSettings(codec='passthru')] * len(source.audio_tracks)
+    # Parse and filter audio tracks if --audio-track option is provided
+    if args.audio_track:
+        try:
+            # Parse comma-separated list of indices
+            keep_indices = {int(idx.strip()) for idx in args.audio_track.split(',')}
+        except ValueError:
+            raise ValueError("Audio tracks must be a comma-separated list of integers.")
+        # Validate that indices are within valid range of source audio tracks
+        for idx in keep_indices:
+            if idx < 0 or idx >= len(source.audio_tracks):
+                raise ValueError(f"Invalid audio track index {idx}. Source only has {len(source.audio_tracks)} audio track(s).")
+        # Exclude any track not in the list of kept indices by setting it to None
+        for idx in range(len(audio_settings)):
+            if idx not in keep_indices:
+                audio_settings[idx] = None
     export_info = AudioExportInfo(output_tracks=audio_settings)
 
     video_settings = VideoSettings(VideoExportMode.SMARTCUT, VideoExportQuality.NORMAL, 'copy')

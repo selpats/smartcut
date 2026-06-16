@@ -89,7 +89,7 @@ def create_video_output_stream(
         out_stream = cast(VideoStream, output_av_container.add_stream(
             video_settings.codec_override,
             rate=in_stream.guessed_rate,
-            options={'x265-params': 'log_level=error'}
+            options={'x265-params': 'log-level=error'}
         ))
         out_stream.width = in_stream.width
         out_stream.height = in_stream.height
@@ -127,7 +127,7 @@ def create_video_output_stream(
             # Copy the stream if no mapping needed
             out_stream = output_av_container.add_stream_from_template(
                 in_stream,
-                options={'x265-params': 'log_level=error'}
+                options={'x265-params': 'log-level=error'}
             )
             out_stream.metadata.update(in_stream.metadata)
             out_stream.disposition = cast(Disposition, in_stream.disposition.value)
@@ -326,12 +326,22 @@ class VideoCutter:
                 if extradata is None:
                     raise ValueError("No extradata")
                 options_str = str(extradata.split(b'options: ')[1][:-1], 'ascii')
-                x265_params = options_str.split(' ')
-                for i, o in enumerate(x265_params):
+                for o in options_str.split(' '):
+                    if not o:
+                        continue
+                    param_name = o.split('=')[0]
+                    if param_name in (
+                        'csv', 'csv-log-level',
+                        'analysis-save', 'analysis-load',
+                        'analysis-save-reuse-level', 'analysis-load-reuse-level',
+                        'stats-write', 'stats-read'
+                    ):
+                        continue
                     if ':' in o:
-                        x265_params[i] = o.replace(':', ',')
+                        o = o.replace(':', ',')
                     if '=' not in o:
-                        x265_params[i] = o + '=1'
+                        o = o + '=1'
+                    x265_params.append(o)
             except Exception:
                 pass
 
@@ -345,7 +355,7 @@ class VideoCutter:
             x265_params.append('info=0')
 
             if self.log_level is not None:
-                x265_params.append(f'log_level={self.log_level}')
+                x265_params.append(f'log-level={self.log_level}')
 
             if self.video_settings.quality == VideoExportQuality.LOSSLESS:
                 x265_params.append('lossless=1')

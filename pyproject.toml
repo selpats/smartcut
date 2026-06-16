@@ -31,7 +31,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
-    "av==16.0.1",
+    "av",
     "tqdm",
 ]
 

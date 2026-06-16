@@ -24,8 +24,7 @@ def create_audio_output_stream(
     """
     track = media_container.audio_tracks[track_index]
     out_stream = output_av_container.add_stream_from_template(
-        track.av_stream,
-        options={'x265-params': 'log_level=error'}
+        track.av_stream
     )
     out_stream.metadata.update(track.av_stream.metadata)
     out_stream.disposition = cast(Disposition, track.av_stream.disposition.value)
