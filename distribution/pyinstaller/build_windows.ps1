@@ -104,7 +104,7 @@ if ($BuildX265 -or $BuildFfmpeg) {
     }
 
     Write-Host "[INFO] Ensuring MSYS2 UCRT64 compiler toolchain and patch utilities are installed..."
-    & $BashPath -lc "pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-cc mingw-w64-ucrt-x86_64-binutils mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja patch"
+    & $BashPath -lc "pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-cc mingw-w64-ucrt-x86_64-binutils mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja patch git"
     if ($LASTEXITCODE -ne 0) {
         Write-Error "[ERROR] Failed to install compilation toolchain via pacman!"
         Read-Host "Press Enter to exit..."
@@ -122,6 +122,15 @@ if ($BuildX265) {
 
     Write-Host "[INFO] Copying x265 packaging files from distribution directory..."
     Copy-Item -Path "$RootDir/distribution/msys2-packages/mingw-w64-x265/*" -Destination $BuildDir -Recurse -Force
+
+    # Ensure line endings are LF for MSYS2 makepkg compatibility on Windows
+    Get-ChildItem -Path $BuildDir -File | ForEach-Object {
+        if ($_.Extension -ne ".zip") {
+            $content = Get-Content -Raw -Path $_.FullName
+            $content = $content -replace "`r`n", "`n"
+            [IO.File]::WriteAllText($_.FullName, $content)
+        }
+    }
 
     # Download the specific tested version of x265 source
     $tag = "4.2.0.6"
@@ -183,6 +192,13 @@ if ($BuildFfmpeg) {
     }
     New-Item -ItemType Directory -Path $FfmpegBuildDir -Force | Out-Null
     Copy-Item -Path "$RootDir/distribution/msys2-packages/mingw-w64-ffmpeg/*" -Destination $FfmpegBuildDir -Recurse -Force
+
+    # Ensure line endings are LF for MSYS2 makepkg compatibility on Windows
+    Get-ChildItem -Path $FfmpegBuildDir -File | ForEach-Object {
+        $content = Get-Content -Raw -Path $_.FullName
+        $content = $content -replace "`r`n", "`n"
+        [IO.File]::WriteAllText($_.FullName, $content)
+    }
 
     $originalLocation = Get-Location
     try {

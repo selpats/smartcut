@@ -1,0 +1,6 @@
+* text=auto
+
+# MSYS2 PKGBUILDs and patches must always have LF line endings
+**/PKGBUILD text eol=lf
+**/*.patch text eol=lf
+**/*.sh text eol=lf
