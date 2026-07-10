@@ -22,7 +22,7 @@ from smartcut.video_cutter import (
     create_video_output_stream,
 )
 
-__version__ = "1.7"
+__version__ = "1.7.2"
 
 
 class ProgressCallback(Protocol):
