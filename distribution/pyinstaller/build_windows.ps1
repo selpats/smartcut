@@ -133,7 +133,7 @@ if ($BuildX265) {
     }
 
     # Download the specific tested version of x265 source
-    $tag = "4.2.0.6"
+    $tag = "4.2.0.57"
     $zipUrl = "https://github.com/jpsdr/x265/archive/refs/tags/$tag.zip"
     Write-Host "[INFO] Downloading x265 source version $tag..."
     try {

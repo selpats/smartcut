@@ -4,7 +4,7 @@
 _realname=x265
 pkgbase=mingw-w64-${_realname}
 pkgname="${MINGW_PACKAGE_PREFIX}-${_realname}"
-pkgver=4.2.0.6
+pkgver=4.2.0.57
 pkgrel=1
 pkgdesc='Open Source H265/HEVC video encoder (mingw-w64, jpsdr custom build)'
 arch=('any')
