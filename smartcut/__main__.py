@@ -272,16 +272,24 @@ time formats:
     # Default audio settings: include all tracks with lossless passthru
     audio_settings: list[AudioExportSettings | None] = [AudioExportSettings(codec='passthru')] * len(source.audio_tracks)
     # Parse and filter audio tracks if --audio-track option is provided
-    if args.audio_track:
-        try:
-            # Parse comma-separated list of indices
-            keep_indices = {int(idx.strip()) for idx in args.audio_track.split(',')}
-        except ValueError:
-            raise ValueError("Audio tracks must be a comma-separated list of integers.")
-        # Validate that indices are within valid range of source audio tracks
-        for idx in keep_indices:
-            if idx < 0 or idx >= len(source.audio_tracks):
-                raise ValueError(f"Invalid audio track index {idx}. Source only has {len(source.audio_tracks)} audio track(s).")
+    if args.audio_track is not None:
+        if args.audio_track.strip().lower() in ("", "none", "-1"):
+            keep_indices = set()
+        else:
+            try:
+                # Parse comma-separated list of indices
+                keep_indices = {int(idx.strip()) for idx in args.audio_track.split(',')}
+            except ValueError:
+                raise ValueError("Audio tracks must be a comma-separated list of integers or 'none'.")
+            
+            if -1 in keep_indices:
+                keep_indices = set()
+                
+            # Validate that indices are within valid range of source audio tracks
+            for idx in keep_indices:
+                if idx < 0 or idx >= len(source.audio_tracks):
+                    raise ValueError(f"Invalid audio track index {idx}. Source only has {len(source.audio_tracks)} audio track(s).")
+                    
         # Exclude any track not in the list of kept indices by setting it to None
         for idx in range(len(audio_settings)):
             if idx not in keep_indices:
