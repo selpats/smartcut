@@ -113,60 +113,73 @@ if ($BuildX265 -or $BuildFfmpeg) {
 }
 
 if ($BuildX265) {
-    Write-Host "[INFO] Rebuilding custom x265..."
-    $BuildDir = "build/mingw-w64-x265"
-    if (Test-Path $BuildDir) {
-        Remove-Item -Path $BuildDir -Recurse -Force
-    }
-    New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
-
-    Write-Host "[INFO] Copying x265 packaging files from distribution directory..."
-    Copy-Item -Path "$RootDir/distribution/msys2-packages/mingw-w64-x265/*" -Destination $BuildDir -Recurse -Force
-
-    # Ensure line endings are LF for MSYS2 makepkg compatibility on Windows
-    Get-ChildItem -Path $BuildDir -File | ForEach-Object {
-        if ($_.Extension -ne ".zip") {
-            $content = Get-Content -Raw -Path $_.FullName
-            $content = $content -replace "`r`n", "`n"
-            [IO.File]::WriteAllText($_.FullName, $content)
+    Write-Host "[INFO] Processing custom x265..."
+    $CachedX265 = Get-ChildItem -Path "pkg-cache/mingw-w64-ucrt-x86_64-x265-*.pkg.tar.zst" -ErrorAction SilentlyContinue
+    if ($CachedX265) {
+        Write-Host "[INFO] Found cached x265 package. Installing directly from cache..."
+        $env:MSYSTEM = "UCRT64"
+        $env:CHERE_INVOKING = 1
+        & $BashPath -lc "pacman -U --noconfirm --overwrite '*' `"$UnixPath/pkg-cache/`"mingw-w64-ucrt-x86_64-x265-*.pkg.tar.zst"
+        if ($LASTEXITCODE -ne 0) { throw "pacman failed to install cached x265" }
+    } else {
+        $BuildDir = "build/mingw-w64-x265"
+        if (Test-Path $BuildDir) {
+            Remove-Item -Path $BuildDir -Recurse -Force
         }
-    }
+        New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
 
-    # Download the specific tested version of x265 source
-    $tag = "4.2.0.57"
-    $zipUrl = "https://github.com/jpsdr/x265/archive/refs/tags/$tag.zip"
-    Write-Host "[INFO] Downloading x265 source version $tag..."
-    try {
-        Invoke-WebRequest -Uri $zipUrl -OutFile "$BuildDir/x265_source.zip"
-    } catch {
-        Write-Error "[ERROR] Failed to download x265 source: $_"
-        Read-Host "Press Enter to exit..."
-        exit 1
-    }
+        Write-Host "[INFO] Copying x265 packaging files from distribution directory..."
+        Copy-Item -Path "$RootDir/distribution/msys2-packages/mingw-w64-x265/*" -Destination $BuildDir -Recurse -Force
 
-    Write-Host "[INFO] Running makepkg-mingw to build custom x265..."
-    $env:MSYSTEM = "UCRT64"
-    $env:CHERE_INVOKING = 1
-    $originalLocation = Get-Location
-    try {
-        Set-Location $BuildDir
-        & $BashPath -lc "makepkg-mingw -s --noconfirm -f"
-        if ($LASTEXITCODE -ne 0) {
-            throw "makepkg-mingw failed with exit code $LASTEXITCODE"
+        # Ensure line endings are LF for MSYS2 makepkg compatibility on Windows
+        Get-ChildItem -Path $BuildDir -File | ForEach-Object {
+            if ($_.Extension -ne ".zip") {
+                $content = Get-Content -Raw -Path $_.FullName
+                $content = $content -replace "`r`n", "`n"
+                [IO.File]::WriteAllText($_.FullName, $content)
+            }
         }
-        
-        Write-Host "[INFO] Installing the compiled x265 package..."
-        & $BashPath -lc "pacman -U --noconfirm --overwrite '*' mingw-w64-ucrt-x86_64-x265-*.pkg.tar.zst"
-        if ($LASTEXITCODE -ne 0) {
-            throw "pacman failed with exit code $LASTEXITCODE"
+
+        # Download the specific tested version of x265 source
+        $tag = "4.2.0.57"
+        $zipUrl = "https://github.com/jpsdr/x265/archive/refs/tags/$tag.zip"
+        Write-Host "[INFO] Downloading x265 source version $tag..."
+        try {
+            Invoke-WebRequest -Uri $zipUrl -OutFile "$BuildDir/x265_source.zip"
+        } catch {
+            Write-Error "[ERROR] Failed to download x265 source: $_"
+            Read-Host "Press Enter to exit..."
+            exit 1
         }
-    } catch {
-        Write-Error "[ERROR] Failed to compile or install custom x265: $_"
+
+        Write-Host "[INFO] Running makepkg-mingw to build custom x265..."
+        $env:MSYSTEM = "UCRT64"
+        $env:CHERE_INVOKING = 1
+        $originalLocation = Get-Location
+        try {
+            Set-Location $BuildDir
+            & $BashPath -lc "makepkg-mingw -s --noconfirm -f"
+            if ($LASTEXITCODE -ne 0) {
+                throw "makepkg-mingw failed with exit code $LASTEXITCODE"
+            }
+            
+            Write-Host "[INFO] Installing the compiled x265 package..."
+            & $BashPath -lc "pacman -U --noconfirm --overwrite '*' mingw-w64-ucrt-x86_64-x265-*.pkg.tar.zst"
+            if ($LASTEXITCODE -ne 0) {
+                throw "pacman failed with exit code $LASTEXITCODE"
+            }
+            
+            Write-Host "[INFO] Saving x265 package to cache..."
+            New-Item -ItemType Directory -Path "$RootDir/pkg-cache" -Force | Out-Null
+            Copy-Item -Path "mingw-w64-ucrt-x86_64-x265-*.pkg.tar.zst" -Destination "$RootDir/pkg-cache/" -Force
+        } catch {
+            Write-Error "[ERROR] Failed to compile or install custom x265: $_"
+            Set-Location $originalLocation
+            Read-Host "Press Enter to exit..."
+            exit 1
+        }
         Set-Location $originalLocation
-        Read-Host "Press Enter to exit..."
-        exit 1
     }
-    Set-Location $originalLocation
 } else {
     Write-Host "[INFO] Skipping x265 rebuild."
 }
@@ -185,42 +198,55 @@ if ($BuildFfmpeg) {
     }
 
     # --- 2c. Build and Install Custom FFmpeg ---
-    Write-Host "[INFO] Setting up build directory for FFmpeg..."
-    $FfmpegBuildDir = "build/mingw-w64-ffmpeg"
-    if (Test-Path $FfmpegBuildDir) {
-        Remove-Item -Path $FfmpegBuildDir -Recurse -Force
-    }
-    New-Item -ItemType Directory -Path $FfmpegBuildDir -Force | Out-Null
-    Copy-Item -Path "$RootDir/distribution/msys2-packages/mingw-w64-ffmpeg/*" -Destination $FfmpegBuildDir -Recurse -Force
-
-    # Ensure line endings are LF for MSYS2 makepkg compatibility on Windows
-    Get-ChildItem -Path $FfmpegBuildDir -File | ForEach-Object {
-        $content = Get-Content -Raw -Path $_.FullName
-        $content = $content -replace "`r`n", "`n"
-        [IO.File]::WriteAllText($_.FullName, $content)
-    }
-
-    $originalLocation = Get-Location
-    try {
-        Set-Location $FfmpegBuildDir
-        Write-Host "[INFO] Running makepkg-mingw to build custom FFmpeg (minimal dependencies)..."
-        & $BashPath -lc "export MAKEFLAGS='-j`$(nproc)' && makepkg-mingw -s --noconfirm -f --skippgpcheck"
-        if ($LASTEXITCODE -ne 0) {
-            throw "makepkg-mingw for ffmpeg failed with exit code $LASTEXITCODE"
+    $CachedFfmpeg = Get-ChildItem -Path "pkg-cache/mingw-w64-ucrt-x86_64-ffmpeg-*.pkg.tar.zst" -ErrorAction SilentlyContinue
+    if ($CachedFfmpeg) {
+        Write-Host "[INFO] Found cached FFmpeg package. Installing directly from cache..."
+        $env:MSYSTEM = "UCRT64"
+        $env:CHERE_INVOKING = 1
+        & $BashPath -lc "pacman -U --noconfirm --overwrite '*' `"$UnixPath/pkg-cache/`"mingw-w64-ucrt-x86_64-ffmpeg-*.pkg.tar.zst"
+        if ($LASTEXITCODE -ne 0) { throw "pacman failed to install cached FFmpeg" }
+    } else {
+        Write-Host "[INFO] Setting up build directory for FFmpeg..."
+        $FfmpegBuildDir = "build/mingw-w64-ffmpeg"
+        if (Test-Path $FfmpegBuildDir) {
+            Remove-Item -Path $FfmpegBuildDir -Recurse -Force
         }
-        
-        Write-Host "[INFO] Installing the compiled FFmpeg package..."
-        & $BashPath -lc "pacman -U --noconfirm --overwrite '*' mingw-w64-ucrt-x86_64-ffmpeg-*.pkg.tar.zst"
-        if ($LASTEXITCODE -ne 0) {
-            throw "pacman for ffmpeg failed with exit code $LASTEXITCODE"
+        New-Item -ItemType Directory -Path $FfmpegBuildDir -Force | Out-Null
+        Copy-Item -Path "$RootDir/distribution/msys2-packages/mingw-w64-ffmpeg/*" -Destination $FfmpegBuildDir -Recurse -Force
+
+        # Ensure line endings are LF for MSYS2 makepkg compatibility on Windows
+        Get-ChildItem -Path $FfmpegBuildDir -File | ForEach-Object {
+            $content = Get-Content -Raw -Path $_.FullName
+            $content = $content -replace "`r`n", "`n"
+            [IO.File]::WriteAllText($_.FullName, $content)
         }
-    } catch {
-        Write-Error "[ERROR] Failed to compile or install custom FFmpeg: $_"
+
+        $originalLocation = Get-Location
+        try {
+            Set-Location $FfmpegBuildDir
+            Write-Host "[INFO] Running makepkg-mingw to build custom FFmpeg (minimal dependencies)..."
+            & $BashPath -lc "export MAKEFLAGS='-j`$(nproc)' && makepkg-mingw -s --noconfirm -f --skippgpcheck"
+            if ($LASTEXITCODE -ne 0) {
+                throw "makepkg-mingw for ffmpeg failed with exit code $LASTEXITCODE"
+            }
+            
+            Write-Host "[INFO] Installing the compiled FFmpeg package..."
+            & $BashPath -lc "pacman -U --noconfirm --overwrite '*' mingw-w64-ucrt-x86_64-ffmpeg-*.pkg.tar.zst"
+            if ($LASTEXITCODE -ne 0) {
+                throw "pacman for ffmpeg failed with exit code $LASTEXITCODE"
+            }
+            
+            Write-Host "[INFO] Saving FFmpeg package to cache..."
+            New-Item -ItemType Directory -Path "$RootDir/pkg-cache" -Force | Out-Null
+            Copy-Item -Path "mingw-w64-ucrt-x86_64-ffmpeg-*.pkg.tar.zst" -Destination "$RootDir/pkg-cache/" -Force
+        } catch {
+            Write-Error "[ERROR] Failed to compile or install custom FFmpeg: $_"
+            Set-Location $originalLocation
+            Read-Host "Press Enter to exit..."
+            exit 1
+        }
         Set-Location $originalLocation
-        Read-Host "Press Enter to exit..."
-        exit 1
     }
-    Set-Location $originalLocation
 } else {
     Write-Host "[INFO] Skipping FFmpeg rebuild."
 }

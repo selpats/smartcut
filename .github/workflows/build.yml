@@ -2,6 +2,8 @@ name: Build Smartcut (MSYS2)
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -16,6 +18,12 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
+    - name: Cache MSYS2 packages
+      uses: actions/cache@v6
+      with:
+        path: pkg-cache
+        key: msys2-packages-${{ hashFiles('distribution/msys2-packages/**/PKGBUILD') }}
+        
     - name: Run Build Script
       run: .\build.bat
       
