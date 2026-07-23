@@ -1,0 +1,36 @@
+name: Arch Linux Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0 # Fetch all history for pkgver()
+
+    - name: Update system and install dependencies
+      run: |
+        pacman -Syu --noconfirm
+        pacman -S --noconfirm git python-build python-installer python-wheel python-setuptools python-numpy python-av python-tqdm
+
+    - name: Run makepkg
+      run: |
+        # makepkg cannot be run as root. Create a build user.
+        useradd -m builduser
+        chown -R builduser:builduser .
+        
+        # Run makepkg in the directory containing PKGBUILD
+        su builduser -c "cd distribution/arch && makepkg -s --noconfirm"
+
+    - name: Verify package was created
+      run: |
+        ls -lh distribution/arch/*.pkg.tar.zst

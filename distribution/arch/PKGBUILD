@@ -1,0 +1,30 @@
+pkgname=smartcut-git
+pkgver=1.7.3.r0.g1234567
+pkgrel=1
+pkgdesc="CLI tool for efficient video cutting with minimal recoding"
+arch=('any')
+url="https://github.com/selpats/smartcut"
+license=('MIT')
+depends=('python' 'python-numpy' 'python-av' 'python-tqdm')
+makedepends=('git' 'python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+provides=("smartcut")
+conflicts=("smartcut")
+source=("smartcut::git+https://github.com/selpats/smartcut.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "smartcut"
+  git describe --long --tags 2>/dev/null | sed 's/\([^-]*-g\)/r\1/;s/-/./g' ||
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "smartcut"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "smartcut"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
