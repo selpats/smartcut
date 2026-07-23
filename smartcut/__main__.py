@@ -241,6 +241,8 @@ time formats:
     parser.add_argument('--log-level', choices=['warning', 'error', 'fatal'],
                        default='warning', metavar='LEVEL',
                        help="Set logging verbosity level (default: %(default)s)")
+    parser.add_argument('-m', '--mode', choices=['smartcut', 'keyframes'],
+                       default='smartcut', help="Export mode (default: %(default)s). 'smartcut' recodes only around cuts. 'keyframes' cuts on keyframes without recoding (fast).")
     parser.add_argument('--version', action='version', version=f'Smartcut {__version__}')
 
     # Preprocess argv to handle negative numbers in -k/-c arguments
@@ -296,7 +298,11 @@ time formats:
                 audio_settings[idx] = None
     export_info = AudioExportInfo(output_tracks=audio_settings)
 
-    video_settings = VideoSettings(VideoExportMode.SMARTCUT, VideoExportQuality.NORMAL, 'copy')
+    mode_map = {
+        'smartcut': VideoExportMode.SMARTCUT,
+        'keyframes': VideoExportMode.KEYFRAMES
+    }
+    video_settings = VideoSettings(mode_map[args.mode], VideoExportQuality.NORMAL, 'copy')
 
     progress = Progress()
 
